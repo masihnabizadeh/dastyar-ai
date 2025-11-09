@@ -30,7 +30,7 @@ class DSS_AI_Engine {
         foreach ($ids as $pid){
             $p = wc_get_product($pid);
             if (!$p) continue;
-            $out.append if false
+            
             $out[] = [
                 'product_id' => $pid,
                 'title' => $p->get_name(),
@@ -106,6 +106,7 @@ class DSS_AI_Engine {
     public static function suggest_structured($user_message){
         $opts = get_option('dss_options', []);
         $api_key = isset($opts['api_key']) ? trim($opts['api_key']) : '';
+        $provider = isset($opts['provider']) ? $opts['provider'] : 'openai';
         $max_results = isset($opts['max_results']) ? intval($opts['max_results']) : 3;
 
         $keywords = self::extract_keywords($user_message);
@@ -124,20 +125,21 @@ class DSS_AI_Engine {
             $scored[] = ['score'=>$sc,'p'=>$p];
         }
         usort($scored, function($a,$b){ return $b['score'] <=> $a['score']; });
-        $top = array_slice($scored, 0, max(1,$max_results));
+        $top = array_slice($scored, 0, max(1, $max_results));
 
         $cards = [];
         foreach ($top as $row){
             $p = $row['p'];
             $cards[] = [
-                'title' => isset($p['title'])?$p['title']:'',
-                'price' => isset($p['price'])?$p['price']:'',
-                'url'   => isset($p['url'])?$p['url']:'#',
-                'image' => isset($p['image'])?$p['image']:''
+                'title' => isset($p['title']) ? $p['title'] : '',
+                'price' => isset($p['price']) ? $p['price'] : '',
+                'url'   => isset($p['url']) ? $p['url'] : '#',
+                'image' => isset($p['image']) ? $p['image'] : ''
             ];
         }
 
         $text = 'این‌ها نزدیک‌ترین پیشنهادها به نیازت هستند:';
+        
         if ($api_key){
             $body = [
                 'model' => 'gpt-4o-mini',
@@ -156,13 +158,17 @@ class DSS_AI_Engine {
                 'body'    => wp_json_encode($body),
                 'timeout' => 15
             ];
-            $response = $o = get_option('dss_options', []);
-                $endpoint = ( isset($o['provider']) && $o['provider']==='avalai' ) ? 'https://api.avalai.ir/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
-                $response = wp_remote_post($endpoint, $args);
+            
+            $endpoint = ($provider === 'avalai') 
+                ? 'https://api.avalai.ir/v1/chat/completions' 
+                : 'https://api.openai.com/v1/chat/completions';
+            
+            $response = wp_remote_post($endpoint, $args);
+            
             if (!is_wp_error($response)){
                 $code = wp_remote_retrieve_response_code($response);
                 $raw  = wp_remote_retrieve_body($response);
-                if ($code===200){
+                if ($code === 200){
                     $data = json_decode($raw, true);
                     if (isset($data['choices'][0]['message']['content'])){
                         $txt = trim($data['choices'][0]['message']['content']);
